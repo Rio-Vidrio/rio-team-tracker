@@ -9,7 +9,8 @@ interface Agent {
 }
 
 interface AgentCounts {
-  reels: number;
+  personalReels: number;
+  businessReels: number;
   posts: number;
 }
 
@@ -48,11 +49,11 @@ const ADMIN_PASSWORD = "Dothework!";
 // ─── HELPERS ────────────────────────────────────────────────────────────────
 
 function getC(map: CountsMap, handle: string): AgentCounts {
-  return map[handle] || { reels: 0, posts: 0 };
+  return map[handle] || { personalReels: 0, businessReels: 0, posts: 0 };
 }
 
 function total(c: AgentCounts): number {
-  return c.reels + c.posts;
+  return c.personalReels + c.businessReels + c.posts;
 }
 
 function loadMap(key: string): CountsMap {
@@ -60,13 +61,19 @@ function loadMap(key: string): CountsMap {
     const raw = localStorage.getItem(key);
     if (!raw) return {};
     const parsed = JSON.parse(raw);
-    // Migrate: if values are plain numbers, convert to { reels, posts }
+    // Migrate old formats to { personalReels, businessReels, posts }
     const result: CountsMap = {};
     for (const [k, v] of Object.entries(parsed)) {
       if (typeof v === "number") {
-        result[k] = { reels: v, posts: 0 };
+        result[k] = { personalReels: v, businessReels: 0, posts: 0 };
       } else {
-        result[k] = v as AgentCounts;
+        const obj = v as Record<string, number>;
+        // Migrate from { reels, posts } to { personalReels, businessReels, posts }
+        if ("reels" in obj && !("personalReels" in obj)) {
+          result[k] = { personalReels: obj.reels || 0, businessReels: 0, posts: obj.posts || 0 };
+        } else {
+          result[k] = { personalReels: obj.personalReels || 0, businessReels: obj.businessReels || 0, posts: obj.posts || 0 };
+        }
       }
     }
     return result;
@@ -159,7 +166,7 @@ export default function App() {
 
   // ─── ACTIONS ────────────────────────────────────────────────────────────
 
-  const adjust = useCallback((handle: string, field: "reels" | "posts", delta: number) => {
+  const adjust = useCallback((handle: string, field: "personalReels" | "businessReels" | "posts", delta: number) => {
     setYearMap((prev) => {
       const c = getC(prev, handle);
       return { ...prev, [handle]: { ...c, [field]: Math.max(0, c[field] + delta) } };
@@ -185,7 +192,7 @@ export default function App() {
 
   const handleResetSince = useCallback(() => {
     const empty: CountsMap = {};
-    ALL_HANDLES.forEach((h) => { empty[h] = { reels: 0, posts: 0 }; });
+    ALL_HANDLES.forEach((h) => { empty[h] = { personalReels: 0, businessReels: 0, posts: 0 }; });
     setCurrentMap(empty);
     saveMap(LS_CURRENT, empty);
     const dateVal = newSinceDate || new Date().toISOString().split("T")[0];
@@ -199,7 +206,7 @@ export default function App() {
   const handleResetYear = useCallback(() => {
     if (confirmText !== "RESET") return;
     const empty: CountsMap = {};
-    ALL_HANDLES.forEach((h) => { empty[h] = { reels: 0, posts: 0 }; });
+    ALL_HANDLES.forEach((h) => { empty[h] = { personalReels: 0, businessReels: 0, posts: 0 }; });
     setYearMap(empty);
     setCurrentMap(empty);
     saveMap(LS_YEAR, empty);
@@ -215,7 +222,8 @@ export default function App() {
     (a, b) => total(getC(yearMap, b.handle)) - total(getC(yearMap, a.handle))
   );
 
-  const totalReels = AGENTS.reduce((s, a) => s + getC(yearMap, a.handle).reels, 0);
+  const totalPersonalReels = AGENTS.reduce((s, a) => s + getC(yearMap, a.handle).personalReels, 0);
+  const totalBusinessReels = AGENTS.reduce((s, a) => s + getC(yearMap, a.handle).businessReels, 0);
   const totalPosts = AGENTS.reduce((s, a) => s + getC(yearMap, a.handle).posts, 0);
 
   const mostActive = AGENTS.reduce(
@@ -239,7 +247,7 @@ export default function App() {
     return (
       <div
         key={agent.handle}
-        className={`grid grid-cols-[44px_1fr_100px_100px_80px_80px] md:grid-cols-[56px_1fr_120px_120px_100px_100px] px-5 py-4 border-b items-center transition-colors ${
+        className={`grid grid-cols-[36px_1fr_68px_68px_68px_56px_56px_56px] md:grid-cols-[56px_1fr_100px_100px_100px_80px_80px_80px] px-3 md:px-5 py-4 border-b items-center transition-colors ${
           isLeaderRow
             ? "bg-yellow-50 border-l-4 border-l-gold border-b-gray-200"
             : "border-b-gray-50 hover:bg-gray-50/80"
@@ -276,36 +284,52 @@ export default function App() {
           </a>
         </div>
 
-        {/* Reels — YTD */}
-        <div className="flex items-center justify-center gap-1">
+        {/* Personal Reels — YTD */}
+        <div className="flex items-center justify-center gap-0.5">
           {adminUnlocked && (
-            <button onClick={() => adjust(agent.handle, "reels", -1)} className="w-6 h-6 rounded-full bg-gray-200 hover:bg-gray-300 text-gray-600 font-bold text-sm flex items-center justify-center transition-all active:scale-90">-</button>
+            <button onClick={() => adjust(agent.handle, "personalReels", -1)} className="w-5 h-5 md:w-6 md:h-6 rounded-full bg-gray-200 hover:bg-gray-300 text-gray-600 font-bold text-xs flex items-center justify-center transition-all active:scale-90">-</button>
           )}
-          <span className="text-lg font-bold text-gray-900 w-10 text-center tabular-nums">{yc.reels}</span>
+          <span className="text-base md:text-lg font-bold text-gray-900 w-7 md:w-10 text-center tabular-nums">{yc.personalReels}</span>
           {adminUnlocked && (
-            <button onClick={() => adjust(agent.handle, "reels", 1)} className="w-6 h-6 rounded-full bg-rio hover:bg-red-700 text-white font-bold text-sm flex items-center justify-center transition-all active:scale-90">+</button>
+            <button onClick={() => adjust(agent.handle, "personalReels", 1)} className="w-5 h-5 md:w-6 md:h-6 rounded-full bg-rio hover:bg-red-700 text-white font-bold text-xs flex items-center justify-center transition-all active:scale-90">+</button>
+          )}
+        </div>
+
+        {/* Business Reels — YTD */}
+        <div className="flex items-center justify-center gap-0.5">
+          {adminUnlocked && (
+            <button onClick={() => adjust(agent.handle, "businessReels", -1)} className="w-5 h-5 md:w-6 md:h-6 rounded-full bg-gray-200 hover:bg-gray-300 text-gray-600 font-bold text-xs flex items-center justify-center transition-all active:scale-90">-</button>
+          )}
+          <span className="text-base md:text-lg font-bold text-gray-900 w-7 md:w-10 text-center tabular-nums">{yc.businessReels}</span>
+          {adminUnlocked && (
+            <button onClick={() => adjust(agent.handle, "businessReels", 1)} className="w-5 h-5 md:w-6 md:h-6 rounded-full bg-rio hover:bg-red-700 text-white font-bold text-xs flex items-center justify-center transition-all active:scale-90">+</button>
           )}
         </div>
 
         {/* Posts — YTD */}
-        <div className="flex items-center justify-center gap-1">
+        <div className="flex items-center justify-center gap-0.5">
           {adminUnlocked && (
-            <button onClick={() => adjust(agent.handle, "posts", -1)} className="w-6 h-6 rounded-full bg-gray-200 hover:bg-gray-300 text-gray-600 font-bold text-sm flex items-center justify-center transition-all active:scale-90">-</button>
+            <button onClick={() => adjust(agent.handle, "posts", -1)} className="w-5 h-5 md:w-6 md:h-6 rounded-full bg-gray-200 hover:bg-gray-300 text-gray-600 font-bold text-xs flex items-center justify-center transition-all active:scale-90">-</button>
           )}
-          <span className="text-lg font-bold text-gray-900 w-10 text-center tabular-nums">{yc.posts}</span>
+          <span className="text-base md:text-lg font-bold text-gray-900 w-7 md:w-10 text-center tabular-nums">{yc.posts}</span>
           {adminUnlocked && (
-            <button onClick={() => adjust(agent.handle, "posts", 1)} className="w-6 h-6 rounded-full bg-rio hover:bg-red-700 text-white font-bold text-sm flex items-center justify-center transition-all active:scale-90">+</button>
+            <button onClick={() => adjust(agent.handle, "posts", 1)} className="w-5 h-5 md:w-6 md:h-6 rounded-full bg-rio hover:bg-red-700 text-white font-bold text-xs flex items-center justify-center transition-all active:scale-90">+</button>
           )}
         </div>
 
-        {/* Reels — Since */}
+        {/* Personal Reels — Since */}
         <div className="text-center">
-          <span className="text-sm font-semibold text-gray-700 tabular-nums">{cc.reels}</span>
+          <span className="text-xs md:text-sm font-semibold text-gray-700 tabular-nums">{cc.personalReels}</span>
+        </div>
+
+        {/* Business Reels — Since */}
+        <div className="text-center">
+          <span className="text-xs md:text-sm font-semibold text-gray-700 tabular-nums">{cc.businessReels}</span>
         </div>
 
         {/* Posts — Since */}
         <div className="text-center">
-          <span className="text-sm font-semibold text-gray-700 tabular-nums">{cc.posts}</span>
+          <span className="text-xs md:text-sm font-semibold text-gray-700 tabular-nums">{cc.posts}</span>
         </div>
 
       </div>
@@ -355,10 +379,14 @@ export default function App() {
 
       <main className="max-w-6xl mx-auto px-4 md:px-8 py-8">
         {/* ─── SUMMARY CARDS ─────────────────────────────── */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
           <div className="bg-white rounded-2xl shadow-md p-5">
-            <p className="text-[11px] text-muted uppercase tracking-widest font-semibold">Total Reels YTD</p>
-            <p className="text-3xl font-bold text-gray-900 mt-1">{totalReels.toLocaleString()}</p>
+            <p className="text-[11px] text-muted uppercase tracking-widest font-semibold">Personal Reels YTD</p>
+            <p className="text-3xl font-bold text-gray-900 mt-1">{totalPersonalReels.toLocaleString()}</p>
+          </div>
+          <div className="bg-white rounded-2xl shadow-md p-5">
+            <p className="text-[11px] text-muted uppercase tracking-widest font-semibold">Business Reels YTD</p>
+            <p className="text-3xl font-bold text-gray-900 mt-1">{totalBusinessReels.toLocaleString()}</p>
           </div>
           <div className="bg-white rounded-2xl shadow-md p-5">
             <p className="text-[11px] text-muted uppercase tracking-widest font-semibold">Total Posts YTD</p>
@@ -382,18 +410,20 @@ export default function App() {
         {/* ─── LEADERBOARD ───────────────────────────────── */}
         <div className="bg-white rounded-2xl shadow-md overflow-visible">
           {/* Column headers — two groups: YTD and Since */}
-          <div className="grid grid-cols-[44px_1fr_100px_100px_80px_80px] md:grid-cols-[56px_1fr_120px_120px_100px_100px] px-5 py-2 border-b border-gray-200 text-[10px] text-muted uppercase tracking-wider font-semibold">
+          <div className="grid grid-cols-[36px_1fr_68px_68px_68px_56px_56px_56px] md:grid-cols-[56px_1fr_100px_100px_100px_80px_80px_80px] px-3 md:px-5 py-2 border-b border-gray-200 text-[9px] md:text-[10px] text-muted uppercase tracking-wider font-semibold">
             <span />
             <span />
-            <span className="text-center col-span-2 border-b border-gray-200 pb-1 -mb-2">YTD</span>
-            <span className="text-center col-span-2 border-b border-gray-200 pb-1 -mb-2">Since {sinceLabel}</span>
+            <span className="text-center col-span-3 border-b border-gray-200 pb-1 -mb-2">YTD</span>
+            <span className="text-center col-span-3 border-b border-gray-200 pb-1 -mb-2">Since {sinceLabel}</span>
           </div>
-          <div className="grid grid-cols-[44px_1fr_100px_100px_80px_80px] md:grid-cols-[56px_1fr_120px_120px_100px_100px] px-5 py-2 border-b border-gray-100 text-[10px] text-muted uppercase tracking-wider font-semibold">
+          <div className="grid grid-cols-[36px_1fr_68px_68px_68px_56px_56px_56px] md:grid-cols-[56px_1fr_100px_100px_100px_80px_80px_80px] px-3 md:px-5 py-2 border-b border-gray-100 text-[8px] md:text-[10px] text-muted uppercase tracking-wider font-semibold">
             <span>#</span>
             <span>Agent</span>
-            <span className="text-center">Reels</span>
+            <span className="text-center">Personal</span>
+            <span className="text-center">Business</span>
             <span className="text-center">Posts</span>
-            <span className="text-center">Reels</span>
+            <span className="text-center">Personal</span>
+            <span className="text-center">Business</span>
             <span className="text-center">Posts</span>
           </div>
 
@@ -448,7 +478,7 @@ export default function App() {
               >
                 Reset Year (All Counts)
                 <span className="block text-xs text-red-400 font-normal mt-0.5">
-                  Zeros ALL Reels &amp; Posts — cannot be undone
+                  Zeros ALL counts — cannot be undone
                 </span>
               </button>
             ) : (
