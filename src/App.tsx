@@ -9,9 +9,9 @@ interface Agent {
 }
 
 interface AgentCounts {
-  personalReels: number;
-  businessReels: number;
-  posts: number;
+  personalReels: number;   // Real Estate Reels
+  businessReels: number;   // Daily Life Reels
+  posts: number;           // Daily Pic (POD)
 }
 
 type CountsMap = Record<string, AgentCounts>;
@@ -35,10 +35,31 @@ const AGENTS: Agent[] = [
   { name: "Ana Vega Gonzalez", handle: "homeswithana2.0" },
   { name: "Amanda Montano", handle: "az_realtor_montano" },
   { name: "Osmany Acosta", handle: "osmanyazrealtor" },
-  { name: "Mariana Lopez", handle: "marianalopezibarra" },
+  { name: "Iris", handle: "iris_placeholder" },
 ];
 
 const ALL_HANDLES = [RIO, ...AGENTS].map((a) => a.handle);
+
+// ─── PREFILL DATA ──────────────────────────────────────────────────────────
+
+const PREFILL_DATA: CountsMap = {
+  "rio.vidrio": { personalReels: 19, businessReels: 9, posts: 10 },
+  "egonvon.p": { personalReels: 19, businessReels: 3, posts: 12 },
+  "mariel.palafox.leon.realtor": { personalReels: 12, businessReels: 9, posts: 17 },
+  "xorealtor.az": { personalReels: 12, businessReels: 4, posts: 18 },
+  "brisasellsaz": { personalReels: 12, businessReels: 3, posts: 6 },
+  "antsellshomes_": { personalReels: 11, businessReels: 0, posts: 12 },
+  "az_realtor_montano": { personalReels: 7, businessReels: 2, posts: 13 },
+  "osmanyazrealtor": { personalReels: 5, businessReels: 3, posts: 12 },
+  "jilarioleon": { personalReels: 3, businessReels: 3, posts: 12 },
+  "mikemhomes": { personalReels: 4, businessReels: 1, posts: 9 },
+  "homeswithana2.0": { personalReels: 3, businessReels: 0, posts: 12 },
+  "azrealty.livclarke": { personalReels: 3, businessReels: 0, posts: 11 },
+  "britni.christenson.azrealtor": { personalReels: 3, businessReels: 0, posts: 6 },
+  "jonbsheets": { personalReels: 2, businessReels: 0, posts: 5 },
+  "gsotelo4": { personalReels: 2, businessReels: 0, posts: 2 },
+  "iris_placeholder": { personalReels: 1, businessReels: 0, posts: 5 },
+};
 
 // localStorage keys
 const LS_YEAR = "rioReelsYear";
@@ -52,23 +73,25 @@ function getC(map: CountsMap, handle: string): AgentCounts {
   return map[handle] || { personalReels: 0, businessReels: 0, posts: 0 };
 }
 
-function total(c: AgentCounts): number {
+function totalVideos(c: AgentCounts): number {
+  return c.personalReels + c.businessReels;
+}
+
+function totalAll(c: AgentCounts): number {
   return c.personalReels + c.businessReels + c.posts;
 }
 
-function loadMap(key: string): CountsMap {
+function loadMap(key: string, fallback: CountsMap): CountsMap {
   try {
     const raw = localStorage.getItem(key);
-    if (!raw) return {};
+    if (!raw) return { ...fallback };
     const parsed = JSON.parse(raw);
-    // Migrate old formats to { personalReels, businessReels, posts }
     const result: CountsMap = {};
     for (const [k, v] of Object.entries(parsed)) {
       if (typeof v === "number") {
         result[k] = { personalReels: v, businessReels: 0, posts: 0 };
       } else {
         const obj = v as Record<string, number>;
-        // Migrate from { reels, posts } to { personalReels, businessReels, posts }
         if ("reels" in obj && !("personalReels" in obj)) {
           result[k] = { personalReels: obj.reels || 0, businessReels: 0, posts: obj.posts || 0 };
         } else {
@@ -78,7 +101,7 @@ function loadMap(key: string): CountsMap {
     }
     return result;
   } catch {
-    return {};
+    return { ...fallback };
   }
 }
 
@@ -87,23 +110,23 @@ function saveMap(key: string, data: CountsMap) {
 }
 
 function fmtDate(iso: string | null): string {
-  if (!iso) return "Jan 1";
+  if (!iso) return "Mar 23";
   const parts = iso.split("T")[0].split("-");
   if (parts.length === 3) {
     const d = new Date(+parts[0], +parts[1] - 1, +parts[2]);
     return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   }
-  return "Jan 1";
+  return "Mar 23";
 }
 
 function fmtDateFull(iso: string | null): string {
-  if (!iso) return "Jan 1, 2026";
+  if (!iso) return "Mar 23, 2026";
   const parts = iso.split("T")[0].split("-");
   if (parts.length === 3) {
     const d = new Date(+parts[0], +parts[1] - 1, +parts[2]);
     return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   }
-  return "Jan 1, 2026";
+  return "Mar 23, 2026";
 }
 
 function todayStr(): string {
@@ -126,13 +149,11 @@ export default function App() {
     ].forEach((k) => localStorage.removeItem(k));
   }, []);
 
-  const [yearMap, setYearMap] = useState<CountsMap>(() => loadMap(LS_YEAR));
-  const [currentMap, setCurrentMap] = useState<CountsMap>(() => loadMap(LS_CURRENT));
+  const [yearMap, setYearMap] = useState<CountsMap>(() => loadMap(LS_YEAR, PREFILL_DATA));
+  const [currentMap, setCurrentMap] = useState<CountsMap>(() => loadMap(LS_CURRENT, PREFILL_DATA));
   const [sinceDate, setSinceDate] = useState<string | null>(
-    () => localStorage.getItem(LS_SINCE_DATE)
+    () => localStorage.getItem(LS_SINCE_DATE) || "2026-03-23"
   );
-
-  // hover preview removed
 
   // Admin
   const [showAdminModal, setShowAdminModal] = useState(false);
@@ -147,6 +168,9 @@ export default function App() {
   // Persist
   useEffect(() => { saveMap(LS_YEAR, yearMap); }, [yearMap]);
   useEffect(() => { saveMap(LS_CURRENT, currentMap); }, [currentMap]);
+  useEffect(() => {
+    if (sinceDate) localStorage.setItem(LS_SINCE_DATE, sinceDate);
+  }, [sinceDate]);
 
   // Auto-lock after 5 min
   const resetAdminTimer = useCallback(() => {
@@ -167,11 +191,12 @@ export default function App() {
   // ─── ACTIONS ────────────────────────────────────────────────────────────
 
   const adjust = useCallback((handle: string, field: "personalReels" | "businessReels" | "posts", delta: number) => {
-    setYearMap((prev) => {
+    // Adjusting the "Since" counter also updates YTD
+    setCurrentMap((prev) => {
       const c = getC(prev, handle);
       return { ...prev, [handle]: { ...c, [field]: Math.max(0, c[field] + delta) } };
     });
-    setCurrentMap((prev) => {
+    setYearMap((prev) => {
       const c = getC(prev, handle);
       return { ...prev, [handle]: { ...c, [field]: Math.max(0, c[field] + delta) } };
     });
@@ -218,36 +243,39 @@ export default function App() {
 
   // ─── COMPUTED ───────────────────────────────────────────────────────────
 
+  // Sort by total videos (RE + Daily reels)
   const sortedAgents = [...AGENTS].sort(
-    (a, b) => total(getC(yearMap, b.handle)) - total(getC(yearMap, a.handle))
+    (a, b) => totalVideos(getC(currentMap, b.handle)) - totalVideos(getC(currentMap, a.handle))
   );
 
-  const totalPersonalReels = AGENTS.reduce((s, a) => s + getC(yearMap, a.handle).personalReels, 0);
-  const totalBusinessReels = AGENTS.reduce((s, a) => s + getC(yearMap, a.handle).businessReels, 0);
-  const totalPosts = AGENTS.reduce((s, a) => s + getC(yearMap, a.handle).posts, 0);
+  const totalREReels = AGENTS.reduce((s, a) => s + getC(currentMap, a.handle).personalReels, 0);
+  const totalDailyReels = AGENTS.reduce((s, a) => s + getC(currentMap, a.handle).businessReels, 0);
+  const totalPOD = AGENTS.reduce((s, a) => s + getC(currentMap, a.handle).posts, 0);
 
   const mostActive = AGENTS.reduce(
     (best, a) => {
-      const t = total(getC(yearMap, a.handle));
+      const t = totalVideos(getC(currentMap, a.handle));
       return t > best.total ? { agent: a, total: t } : best;
     },
     { agent: null as Agent | null, total: 0 }
   );
 
-  const agentsActive = AGENTS.filter((a) => total(getC(yearMap, a.handle)) > 0).length;
+  const agentsActive = AGENTS.filter((a) => totalAll(getC(currentMap, a.handle)) > 0).length;
 
   const sinceLabel = fmtDate(sinceDate);
 
   // ─── ROW RENDERER ───────────────────────────────────────────────────────
 
+  const gridCols = "grid-cols-[36px_1fr_60px_60px_60px_50px_50px_50px] md:grid-cols-[56px_1fr_100px_100px_100px_80px_80px_80px]";
+
   function renderRow(agent: Agent, rank: number | null, isLeaderRow: boolean) {
-    const yc = getC(yearMap, agent.handle);
     const cc = getC(currentMap, agent.handle);
+    const yc = getC(yearMap, agent.handle);
 
     return (
       <div
         key={agent.handle}
-        className={`grid grid-cols-[36px_1fr_68px_68px_68px_56px_56px_56px] md:grid-cols-[56px_1fr_100px_100px_100px_80px_80px_80px] px-3 md:px-5 py-4 border-b items-center transition-colors ${
+        className={`grid ${gridCols} px-3 md:px-5 py-4 border-b items-center transition-colors ${
           isLeaderRow
             ? "bg-yellow-50 border-l-4 border-l-gold border-b-gray-200"
             : "border-b-gray-50 hover:bg-gray-50/80"
@@ -284,52 +312,56 @@ export default function App() {
           </a>
         </div>
 
-        {/* Personal Reels — YTD */}
+        {/* ── SINCE (primary, editable) ── */}
+
+        {/* RE Reels — Since */}
         <div className="flex items-center justify-center gap-0.5">
           {adminUnlocked && (
             <button onClick={() => adjust(agent.handle, "personalReels", -1)} className="w-5 h-5 md:w-6 md:h-6 rounded-full bg-gray-200 hover:bg-gray-300 text-gray-600 font-bold text-xs flex items-center justify-center transition-all active:scale-90">-</button>
           )}
-          <span className="text-base md:text-lg font-bold text-gray-900 w-7 md:w-10 text-center tabular-nums">{yc.personalReels}</span>
+          <span className="text-base md:text-lg font-bold text-gray-900 w-7 md:w-10 text-center tabular-nums">{cc.personalReels}</span>
           {adminUnlocked && (
             <button onClick={() => adjust(agent.handle, "personalReels", 1)} className="w-5 h-5 md:w-6 md:h-6 rounded-full bg-rio hover:bg-red-700 text-white font-bold text-xs flex items-center justify-center transition-all active:scale-90">+</button>
           )}
         </div>
 
-        {/* Business Reels — YTD */}
+        {/* Daily Life — Since */}
         <div className="flex items-center justify-center gap-0.5">
           {adminUnlocked && (
             <button onClick={() => adjust(agent.handle, "businessReels", -1)} className="w-5 h-5 md:w-6 md:h-6 rounded-full bg-gray-200 hover:bg-gray-300 text-gray-600 font-bold text-xs flex items-center justify-center transition-all active:scale-90">-</button>
           )}
-          <span className="text-base md:text-lg font-bold text-gray-900 w-7 md:w-10 text-center tabular-nums">{yc.businessReels}</span>
+          <span className="text-base md:text-lg font-bold text-gray-900 w-7 md:w-10 text-center tabular-nums">{cc.businessReels}</span>
           {adminUnlocked && (
             <button onClick={() => adjust(agent.handle, "businessReels", 1)} className="w-5 h-5 md:w-6 md:h-6 rounded-full bg-rio hover:bg-red-700 text-white font-bold text-xs flex items-center justify-center transition-all active:scale-90">+</button>
           )}
         </div>
 
-        {/* Posts — YTD */}
+        {/* Daily Pic — Since */}
         <div className="flex items-center justify-center gap-0.5">
           {adminUnlocked && (
             <button onClick={() => adjust(agent.handle, "posts", -1)} className="w-5 h-5 md:w-6 md:h-6 rounded-full bg-gray-200 hover:bg-gray-300 text-gray-600 font-bold text-xs flex items-center justify-center transition-all active:scale-90">-</button>
           )}
-          <span className="text-base md:text-lg font-bold text-gray-900 w-7 md:w-10 text-center tabular-nums">{yc.posts}</span>
+          <span className="text-base md:text-lg font-bold text-gray-900 w-7 md:w-10 text-center tabular-nums">{cc.posts}</span>
           {adminUnlocked && (
             <button onClick={() => adjust(agent.handle, "posts", 1)} className="w-5 h-5 md:w-6 md:h-6 rounded-full bg-rio hover:bg-red-700 text-white font-bold text-xs flex items-center justify-center transition-all active:scale-90">+</button>
           )}
         </div>
 
-        {/* Personal Reels — Since */}
+        {/* ── YTD (read-only, right side) ── */}
+
+        {/* RE Reels — YTD */}
         <div className="text-center">
-          <span className="text-xs md:text-sm font-semibold text-gray-700 tabular-nums">{cc.personalReels}</span>
+          <span className="text-xs md:text-sm font-semibold text-gray-700 tabular-nums">{yc.personalReels}</span>
         </div>
 
-        {/* Business Reels — Since */}
+        {/* Daily Life — YTD */}
         <div className="text-center">
-          <span className="text-xs md:text-sm font-semibold text-gray-700 tabular-nums">{cc.businessReels}</span>
+          <span className="text-xs md:text-sm font-semibold text-gray-700 tabular-nums">{yc.businessReels}</span>
         </div>
 
-        {/* Posts — Since */}
+        {/* Daily Pic — YTD */}
         <div className="text-center">
-          <span className="text-xs md:text-sm font-semibold text-gray-700 tabular-nums">{cc.posts}</span>
+          <span className="text-xs md:text-sm font-semibold text-gray-700 tabular-nums">{yc.posts}</span>
         </div>
 
       </div>
@@ -340,26 +372,22 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-offwhite">
-      {/* ─── HEADER ──────────────────────────────────────── */}
-      <header className="bg-white border-b-2 border-rio px-4 md:px-8 py-4">
+      {/* ─── HEADER (black with logos) ───────────────────── */}
+      <header className="bg-black px-4 md:px-8 py-4">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-rio rounded-xl flex items-center justify-center">
-              <span className="text-white font-black text-lg">R</span>
-            </div>
-            <h1 className="text-lg font-bold tracking-tight text-gray-900">
-              The Rio Group
+          <img src="/rio-logo-white.png" alt="The Rio Group" className="h-10 md:h-12 w-auto" />
+          <div className="text-center hidden sm:block">
+            <h1 className="text-white text-sm md:text-base font-bold tracking-wide uppercase">
+              Team Content Tracker
             </h1>
+            <p className="text-gray-400 text-[10px] md:text-xs font-medium">{todayStr()}</p>
           </div>
-          <h2 className="text-sm md:text-base font-semibold text-gray-900 hidden sm:block">
-            Team Content Tracker
-          </h2>
           <div className="flex items-center gap-3">
-            <p className="text-xs text-muted font-medium hidden md:block">{todayStr()}</p>
+            <img src="/az-logo-white.png" alt="AZ & Associates" className="h-8 md:h-10 w-auto" />
             {adminUnlocked ? (
               <button
                 onClick={() => setAdminUnlocked(false)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50 border border-green-200 rounded-xl text-xs font-semibold text-green-700 hover:bg-green-100 transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-green-900/40 border border-green-500/40 rounded-xl text-xs font-semibold text-green-400 hover:bg-green-900/60 transition-colors"
               >
                 <span className="w-2 h-2 rounded-full bg-green-500" />
                 Admin
@@ -381,50 +409,50 @@ export default function App() {
         {/* ─── SUMMARY CARDS ─────────────────────────────── */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
           <div className="bg-white rounded-2xl shadow-md p-5">
-            <p className="text-[11px] text-muted uppercase tracking-widest font-semibold">Personal Reels YTD</p>
-            <p className="text-3xl font-bold text-gray-900 mt-1">{totalPersonalReels.toLocaleString()}</p>
+            <p className="text-[11px] text-muted uppercase tracking-widest font-semibold">RE Reels</p>
+            <p className="text-3xl font-bold text-gray-900 mt-1">{totalREReels.toLocaleString()}</p>
           </div>
           <div className="bg-white rounded-2xl shadow-md p-5">
-            <p className="text-[11px] text-muted uppercase tracking-widest font-semibold">Business Reels YTD</p>
-            <p className="text-3xl font-bold text-gray-900 mt-1">{totalBusinessReels.toLocaleString()}</p>
+            <p className="text-[11px] text-muted uppercase tracking-widest font-semibold">Daily Life Reels</p>
+            <p className="text-3xl font-bold text-gray-900 mt-1">{totalDailyReels.toLocaleString()}</p>
           </div>
           <div className="bg-white rounded-2xl shadow-md p-5">
-            <p className="text-[11px] text-muted uppercase tracking-widest font-semibold">Total Posts YTD</p>
-            <p className="text-3xl font-bold text-gray-900 mt-1">{totalPosts.toLocaleString()}</p>
+            <p className="text-[11px] text-muted uppercase tracking-widest font-semibold">Daily Pics</p>
+            <p className="text-3xl font-bold text-gray-900 mt-1">{totalPOD.toLocaleString()}</p>
           </div>
           <div className="bg-white rounded-2xl shadow-md p-5">
             <p className="text-[11px] text-muted uppercase tracking-widest font-semibold">Most Active</p>
             <p className="text-lg font-bold text-gray-900 mt-1 truncate">{mostActive.agent?.name ?? "—"}</p>
             {mostActive.total > 0 && (
-              <p className="text-xs text-rio font-semibold">{mostActive.total} total</p>
+              <p className="text-xs text-rio font-semibold">{mostActive.total} videos</p>
             )}
           </div>
           <div className="bg-white rounded-2xl shadow-md p-5">
             <p className="text-[11px] text-muted uppercase tracking-widest font-semibold">Agents Active</p>
             <p className="text-3xl font-bold text-gray-900 mt-1">
-              {agentsActive}<span className="text-base text-muted font-normal"> / 15</span>
+              {agentsActive}<span className="text-base text-muted font-normal"> / {AGENTS.length}</span>
             </p>
           </div>
         </div>
 
         {/* ─── LEADERBOARD ───────────────────────────────── */}
         <div className="bg-white rounded-2xl shadow-md overflow-visible">
-          {/* Column headers — two groups: YTD and Since */}
-          <div className="grid grid-cols-[36px_1fr_68px_68px_68px_56px_56px_56px] md:grid-cols-[56px_1fr_100px_100px_100px_80px_80px_80px] px-3 md:px-5 py-2 border-b border-gray-200 text-[9px] md:text-[10px] text-muted uppercase tracking-wider font-semibold">
+          {/* Column headers — Since (primary, left) | YTD (right) */}
+          <div className={`grid ${gridCols} px-3 md:px-5 py-2 border-b border-gray-200 text-[9px] md:text-[10px] text-muted uppercase tracking-wider font-semibold`}>
             <span />
             <span />
+            <span className="text-center col-span-3 border-b border-rio pb-1 -mb-2 text-rio">Since {sinceLabel}</span>
             <span className="text-center col-span-3 border-b border-gray-200 pb-1 -mb-2">YTD</span>
-            <span className="text-center col-span-3 border-b border-gray-200 pb-1 -mb-2">Since {sinceLabel}</span>
           </div>
-          <div className="grid grid-cols-[36px_1fr_68px_68px_68px_56px_56px_56px] md:grid-cols-[56px_1fr_100px_100px_100px_80px_80px_80px] px-3 md:px-5 py-2 border-b border-gray-100 text-[8px] md:text-[10px] text-muted uppercase tracking-wider font-semibold">
+          <div className={`grid ${gridCols} px-3 md:px-5 py-2 border-b border-gray-100 text-[8px] md:text-[10px] text-muted uppercase tracking-wider font-semibold`}>
             <span>#</span>
             <span>Agent</span>
-            <span className="text-center">Personal</span>
-            <span className="text-center">Business</span>
-            <span className="text-center">Posts</span>
-            <span className="text-center">Personal</span>
-            <span className="text-center">Business</span>
-            <span className="text-center">Posts</span>
+            <span className="text-center">RE Reel</span>
+            <span className="text-center">Daily</span>
+            <span className="text-center">Pic</span>
+            <span className="text-center">RE Reel</span>
+            <span className="text-center">Daily</span>
+            <span className="text-center">Pic</span>
           </div>
 
           {/* Rio's row — admin only */}
