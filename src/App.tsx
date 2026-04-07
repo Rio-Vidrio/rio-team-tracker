@@ -141,12 +141,22 @@ function todayStr(): string {
 // ─── COMPONENT ──────────────────────────────────────────────────────────────
 
 export default function App() {
-  // Clean up stale localStorage keys on mount
+  // One-time migration: write prefill data and clear stale keys
   useEffect(() => {
-    [
-      "rioTeamTracker", "rioTeamYear", "rioTeamCurrent", "rioTeamBaseline",
-      "rioTeamRefreshDate", "rioReelBaseline", "rioPodsYear", "rioPodsCurrent",
-    ].forEach((k) => localStorage.removeItem(k));
+    const migrated = localStorage.getItem("rioV3Migrated");
+    if (!migrated) {
+      // Clear all old keys
+      [
+        "rioTeamTracker", "rioTeamYear", "rioTeamCurrent", "rioTeamBaseline",
+        "rioTeamRefreshDate", "rioReelBaseline", "rioPodsYear", "rioPodsCurrent",
+        LS_YEAR, LS_CURRENT, LS_SINCE_DATE,
+      ].forEach((k) => localStorage.removeItem(k));
+      // Write prefill
+      saveMap(LS_YEAR, PREFILL_DATA);
+      saveMap(LS_CURRENT, PREFILL_DATA);
+      localStorage.setItem(LS_SINCE_DATE, "2026-03-23");
+      localStorage.setItem("rioV3Migrated", "1");
+    }
   }, []);
 
   const [yearMap, setYearMap] = useState<CountsMap>(() => loadMap(LS_YEAR, PREFILL_DATA));
