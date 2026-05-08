@@ -36,11 +36,54 @@ const TEAM: Agent[] = [
   { name: "Iris", handle: "iris_placeholder" },
 ];
 
-// Use unavatar.io to proxy Instagram profile pictures
-const avatarUrl = (handle: string) =>
-  `https://unavatar.io/instagram/${handle}?fallback=https://unavatar.io/${handle}`;
+// Local avatar lookup. Drop a JPG/PNG at `/public/agents/{handle}.jpg` to override.
+// If the local file is missing, we fall through to a beautiful gradient-initial SVG.
+const localAvatar = (handle: string) => `/agents/${handle}.jpg`;
 
 const igUrl = (handle: string) => `https://www.instagram.com/${handle}/`;
+
+// Deterministic hue from handle so each agent has a stable, unique gradient
+function hueFromHandle(handle: string): number {
+  let h = 0;
+  for (let i = 0; i < handle.length; i++) h = (h * 31 + handle.charCodeAt(i)) >>> 0;
+  return h % 360;
+}
+
+function initials(name: string): string {
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((s) => s[0]?.toUpperCase())
+    .join("");
+}
+
+// Generate a beautiful gradient-initial avatar as inline SVG data URL
+function gradientAvatar(name: string, handle: string): string {
+  const hue = hueFromHandle(handle);
+  const c1 = `hsl(${hue}, 65%, 30%)`;
+  const c2 = `hsl(${(hue + 40) % 360}, 70%, 18%)`;
+  const accent = `hsl(${(hue + 180) % 360}, 80%, 60%)`;
+  const init = initials(name);
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'>
+    <defs>
+      <linearGradient id='g' x1='0' y1='0' x2='1' y2='1'>
+        <stop offset='0' stop-color='${c1}'/>
+        <stop offset='1' stop-color='${c2}'/>
+      </linearGradient>
+      <radialGradient id='glow' cx='30%' cy='30%' r='60%'>
+        <stop offset='0' stop-color='${accent}' stop-opacity='0.45'/>
+        <stop offset='1' stop-color='${accent}' stop-opacity='0'/>
+      </radialGradient>
+    </defs>
+    <rect width='200' height='200' fill='url(%23g)'/>
+    <rect width='200' height='200' fill='url(%23glow)'/>
+    <text x='50%' y='54%' text-anchor='middle' dominant-baseline='middle'
+      font-family='Inter, system-ui, sans-serif' font-size='84' font-weight='800' fill='white'
+      letter-spacing='-2'>${init}</text>
+  </svg>`;
+  return `data:image/svg+xml;utf8,${svg.replace(/\n\s*/g, "").replace(/#/g, "%23")}`;
+}
 
 // ─── COMPONENT ──────────────────────────────────────────────────────────────
 
@@ -85,7 +128,7 @@ export default function App() {
         {/* ─── HERO ──────────────────────────────────────────── */}
         <section className="max-w-7xl mx-auto px-6 md:px-12 pt-20 md:pt-28 pb-12 md:pb-16">
           <p className="text-rio text-[11px] md:text-xs tracking-[0.4em] uppercase font-semibold mb-6">
-            The Rio Group · Est. 2024
+            The Rio Group · Est. 2016
           </p>
           <h1 className="font-bold text-white tracking-tight leading-[0.95]" style={{ fontSize: "clamp(3rem, 9vw, 8rem)" }}>
             Meet the
@@ -174,13 +217,15 @@ function FeatureCard({
       <div className="relative">
         <div className={`relative w-full max-w-[280px] mx-auto aspect-square rounded-full overflow-hidden ring-1 ring-rio/30 transition-all duration-500 ${hovered ? "ring-4 ring-rio scale-[1.02]" : ""}`}>
           <img
-            src={avatarUrl(agent.handle)}
+            src={localAvatar(agent.handle)}
             alt={agent.name}
-            loading="lazy"
             className="w-full h-full object-cover"
             onError={(e) => {
-              (e.currentTarget as HTMLImageElement).src =
-                `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%23C8202A' width='100' height='100'/><text x='50' y='62' text-anchor='middle' font-family='sans-serif' font-size='40' fill='white' font-weight='700'>${agent.name[0]}</text></svg>`;
+              const img = e.currentTarget as HTMLImageElement;
+              if (!img.dataset.fallback) {
+                img.dataset.fallback = "1";
+                img.src = gradientAvatar(agent.name, agent.handle);
+              }
             }}
           />
         </div>
@@ -253,13 +298,15 @@ function AgentCard({
       >
         <div className="relative w-32 h-32 md:w-40 md:h-40 rounded-full overflow-hidden ring-2 ring-rio shadow-2xl shadow-rio/40">
           <img
-            src={avatarUrl(agent.handle)}
+            src={localAvatar(agent.handle)}
             alt={agent.name}
-            loading="lazy"
             className="w-full h-full object-cover"
             onError={(e) => {
-              (e.currentTarget as HTMLImageElement).src =
-                `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%23C8202A' width='100' height='100'/><text x='50' y='62' text-anchor='middle' font-family='sans-serif' font-size='40' fill='white' font-weight='700'>${agent.name[0]}</text></svg>`;
+              const img = e.currentTarget as HTMLImageElement;
+              if (!img.dataset.fallback) {
+                img.dataset.fallback = "1";
+                img.src = gradientAvatar(agent.name, agent.handle);
+              }
             }}
           />
         </div>
