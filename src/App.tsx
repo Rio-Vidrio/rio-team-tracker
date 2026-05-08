@@ -36,13 +36,15 @@ const TEAM: Agent[] = [
   { name: "Iris", handle: "iris_placeholder" },
 ];
 
-// Local avatar lookup. Drop a JPG/PNG at `/public/agents/{handle}.jpg` to override.
-// If the local file is missing, we fall through to a beautiful gradient-initial SVG.
-const localAvatar = (handle: string) => `/agents/${handle}.jpg`;
-
 const igUrl = (handle: string) => `https://www.instagram.com/${handle}/`;
 
-// Deterministic hue from handle so each agent has a stable, unique gradient
+// Avatar resolution chain:
+// 1. /agents/{handle}.jpg (local file you can drop in)
+// 2. /api/avatar?handle={handle} (Vercel function that scrapes IG)
+// 3. gradient initial fallback (always works)
+const localAvatar = (handle: string) => `/agents/${handle}.jpg`;
+const apiAvatar = (handle: string) => `/api/avatar?handle=${encodeURIComponent(handle)}`;
+
 function hueFromHandle(handle: string): number {
   let h = 0;
   for (let i = 0; i < handle.length; i++) h = (h * 31 + handle.charCodeAt(i)) >>> 0;
@@ -58,7 +60,6 @@ function initials(name: string): string {
     .join("");
 }
 
-// Generate a beautiful gradient-initial avatar as inline SVG data URL
 function gradientAvatar(name: string, handle: string): string {
   const hue = hueFromHandle(handle);
   const c1 = `hsl(${hue}, 65%, 30%)`;
@@ -83,6 +84,29 @@ function gradientAvatar(name: string, handle: string): string {
       letter-spacing='-2'>${init}</text>
   </svg>`;
   return `data:image/svg+xml;utf8,${svg.replace(/\n\s*/g, "").replace(/#/g, "%23")}`;
+}
+
+// Smart Avatar component — tries local → API → gradient fallback
+function Avatar({ agent, className }: { agent: Agent; className?: string }) {
+  return (
+    <img
+      src={localAvatar(agent.handle)}
+      alt={agent.name}
+      loading="lazy"
+      className={className}
+      onError={(e) => {
+        const img = e.currentTarget as HTMLImageElement;
+        const stage = img.dataset.stage || "0";
+        if (stage === "0") {
+          img.dataset.stage = "1";
+          img.src = apiAvatar(agent.handle);
+        } else if (stage === "1") {
+          img.dataset.stage = "2";
+          img.src = gradientAvatar(agent.name, agent.handle);
+        }
+      }}
+    />
+  );
 }
 
 // ─── COMPONENT ──────────────────────────────────────────────────────────────
@@ -111,49 +135,44 @@ export default function App() {
       <div className="relative z-10">
         {/* ─── HEADER ────────────────────────────────────────── */}
         <header className="border-b border-white/10 backdrop-blur-sm">
-          <div className="max-w-7xl mx-auto px-6 md:px-12 py-6 flex items-center justify-between">
+          <div className="max-w-7xl mx-auto px-6 md:px-10 py-5 flex items-center justify-between">
             <img
               src="/rio-logo-white.png"
               alt="The Rio Group"
-              className="h-10 md:h-14 w-auto"
+              className="h-9 md:h-11 w-auto"
             />
             <img
               src="/az-logo-white.png"
               alt="AZ & Associates"
-              className="h-9 md:h-12 w-auto opacity-80"
+              className="h-8 md:h-10 w-auto opacity-80"
             />
           </div>
         </header>
 
         {/* ─── HERO ──────────────────────────────────────────── */}
-        <section className="max-w-7xl mx-auto px-6 md:px-12 pt-20 md:pt-28 pb-12 md:pb-16">
-          <p className="text-rio text-[11px] md:text-xs tracking-[0.4em] uppercase font-semibold mb-6">
+        <section className="max-w-7xl mx-auto px-6 md:px-10 pt-14 md:pt-20 pb-10 md:pb-14">
+          <p className="text-rio text-[10px] md:text-xs tracking-[0.4em] uppercase font-semibold mb-5">
             The Rio Group · Est. 2016
           </p>
-          <h1 className="font-bold text-white tracking-tight leading-[0.95]" style={{ fontSize: "clamp(3rem, 9vw, 8rem)" }}>
+          <h1 className="font-bold text-white tracking-tight leading-[0.95]" style={{ fontSize: "clamp(2.5rem, 7vw, 6rem)" }}>
             Meet the
             <br />
             <span className="italic font-light text-white/60">team that</span>
             <br />
             <span className="text-rio">moves Arizona.</span>
           </h1>
-          <p className="mt-8 text-white/50 text-base md:text-lg max-w-xl leading-relaxed">
-            A directory of every realtor, every Reel, every story.
-            Hover to peek — tap to follow.
+          <p className="mt-6 text-white/50 text-sm md:text-base max-w-xl leading-relaxed">
+            Every realtor, every Reel, every story — one click away.
           </p>
         </section>
 
-        {/* ─── LEADER FEATURE ────────────────────────────────── */}
-        <section className="max-w-7xl mx-auto px-6 md:px-12 mb-16 md:mb-20">
-          <FeatureCard
-            agent={RIO}
-            hovered={hovered === RIO.handle}
-            onHover={setHovered}
-          />
+        {/* ─── LEADER STRIP ──────────────────────────────────── */}
+        <section className="max-w-7xl mx-auto px-6 md:px-10 mb-10 md:mb-12">
+          <FeatureCard agent={RIO} />
         </section>
 
         {/* ─── DIVIDER ───────────────────────────────────────── */}
-        <div className="max-w-7xl mx-auto px-6 md:px-12 mb-12 md:mb-16">
+        <div className="max-w-7xl mx-auto px-6 md:px-10 mb-6 md:mb-8">
           <div className="flex items-center gap-6">
             <span className="text-rio text-[10px] md:text-xs tracking-[0.4em] uppercase font-semibold whitespace-nowrap">
               The Roster · {TEAM.length} agents
@@ -162,9 +181,9 @@ export default function App() {
           </div>
         </div>
 
-        {/* ─── TEAM GRID ─────────────────────────────────────── */}
-        <section className="max-w-7xl mx-auto px-6 md:px-12 pb-20 md:pb-32">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-px bg-white/[0.06] rounded-3xl overflow-hidden border border-white/10">
+        {/* ─── TEAM GRID — denser ────────────────────────────── */}
+        <section className="max-w-7xl mx-auto px-6 md:px-10 pb-20 md:pb-28">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 md:gap-4">
             {TEAM.map((agent) => (
               <AgentCard
                 key={agent.handle}
@@ -178,7 +197,7 @@ export default function App() {
 
         {/* ─── FOOTER ────────────────────────────────────────── */}
         <footer className="border-t border-white/10 backdrop-blur-sm">
-          <div className="max-w-7xl mx-auto px-6 md:px-12 py-8 flex flex-col md:flex-row items-center justify-between gap-4 text-[11px] tracking-widest uppercase text-white/40">
+          <div className="max-w-7xl mx-auto px-6 md:px-10 py-6 flex flex-col md:flex-row items-center justify-between gap-3 text-[10px] tracking-widest uppercase text-white/40">
             <span>© {new Date().getFullYear()} The Rio Group</span>
             <span>Powered by AZ &amp; Associates</span>
           </div>
@@ -188,74 +207,50 @@ export default function App() {
   );
 }
 
-// ─── FEATURE CARD (Leader) ──────────────────────────────────────────────────
+// ─── FEATURE CARD (Leader, compact horizontal strip) ────────────────────────
 
-function FeatureCard({
-  agent,
-  hovered,
-  onHover,
-}: {
-  agent: Agent;
-  hovered: boolean;
-  onHover: (h: string | null) => void;
-}) {
+function FeatureCard({ agent }: { agent: Agent }) {
   return (
     <a
       href={igUrl(agent.handle)}
       target="_blank"
       rel="noopener noreferrer"
-      onMouseEnter={() => onHover(agent.handle)}
-      onMouseLeave={() => onHover(null)}
-      className="group relative grid grid-cols-1 md:grid-cols-[1fr_2fr] gap-8 md:gap-12 items-center bg-gradient-to-br from-rio/15 via-black to-black border border-rio/30 rounded-3xl p-8 md:p-12 overflow-hidden hover:border-rio transition-all duration-500"
+      className="group relative flex items-center gap-5 md:gap-7 bg-gradient-to-r from-rio/15 via-black to-black border border-rio/30 rounded-2xl p-5 md:p-6 overflow-hidden hover:border-rio transition-all duration-500"
     >
-      {/* Glow on hover */}
+      {/* Glow */}
       <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none">
-        <div className="absolute -top-20 -right-20 w-96 h-96 bg-rio/20 rounded-full blur-3xl" />
+        <div className="absolute -top-12 -right-12 w-72 h-72 bg-rio/20 rounded-full blur-3xl" />
       </div>
 
       {/* Avatar */}
-      <div className="relative">
-        <div className={`relative w-full max-w-[280px] mx-auto aspect-square rounded-full overflow-hidden ring-1 ring-rio/30 transition-all duration-500 ${hovered ? "ring-4 ring-rio scale-[1.02]" : ""}`}>
-          <img
-            src={localAvatar(agent.handle)}
-            alt={agent.name}
-            className="w-full h-full object-cover"
-            onError={(e) => {
-              const img = e.currentTarget as HTMLImageElement;
-              if (!img.dataset.fallback) {
-                img.dataset.fallback = "1";
-                img.src = gradientAvatar(agent.name, agent.handle);
-              }
-            }}
-          />
+      <div className="relative w-20 h-20 md:w-28 md:h-28 flex-shrink-0">
+        <div className="w-full h-full rounded-full overflow-hidden ring-2 ring-rio/40 group-hover:ring-rio transition-all duration-500">
+          <Avatar agent={agent} className="w-full h-full object-cover" />
         </div>
-        {/* Decorative ring */}
-        <div className="absolute inset-0 rounded-full border border-rio/20 scale-110 pointer-events-none" />
       </div>
 
       {/* Info */}
-      <div className="relative">
-        <span className="inline-block text-rio text-[10px] tracking-[0.4em] uppercase font-semibold mb-4">
+      <div className="relative flex-1 min-w-0">
+        <span className="inline-block text-rio text-[9px] md:text-[10px] tracking-[0.3em] uppercase font-semibold mb-1">
           {agent.role || "Featured"}
         </span>
-        <h2 className="text-5xl md:text-7xl font-bold tracking-tight leading-[0.95] mb-4">
+        <h2 className="text-2xl md:text-4xl font-bold tracking-tight leading-tight">
           {agent.name}
         </h2>
-        <p className="text-white/60 text-lg md:text-xl mb-6 font-light">
+        <p className="text-white/50 text-xs md:text-sm font-mono mt-0.5">
           @{agent.handle}
         </p>
-        <span className="inline-flex items-center gap-3 text-rio font-semibold text-sm tracking-wider uppercase">
-          View Instagram
-          <svg width="18" height="10" viewBox="0 0 18 10" fill="none" className="transition-transform group-hover:translate-x-2">
-            <path d="M1 5h16M13 1l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </span>
       </div>
+
+      {/* Arrow */}
+      <svg width="18" height="10" viewBox="0 0 18 10" fill="none" className="text-rio transition-transform group-hover:translate-x-2 flex-shrink-0">
+        <path d="M1 5h16M13 1l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
     </a>
   );
 }
 
-// ─── AGENT CARD ─────────────────────────────────────────────────────────────
+// ─── AGENT CARD — compact ───────────────────────────────────────────────────
 
 function AgentCard({
   agent,
@@ -273,57 +268,37 @@ function AgentCard({
       rel="noopener noreferrer"
       onMouseEnter={() => onHover(agent.handle)}
       onMouseLeave={() => onHover(null)}
-      className="group relative bg-black hover:bg-zinc-950 transition-colors duration-300 p-8 md:p-10 flex flex-col justify-between min-h-[280px] overflow-hidden"
+      className="group relative bg-zinc-950/80 hover:bg-zinc-900 border border-white/10 hover:border-rio/40 transition-all duration-300 rounded-2xl p-4 flex flex-col items-center text-center overflow-hidden"
     >
       {/* Hover glow */}
       <div className={`absolute inset-0 transition-opacity duration-500 pointer-events-none ${hovered ? "opacity-100" : "opacity-0"}`}>
-        <div className="absolute -bottom-20 -right-20 w-64 h-64 bg-rio/20 rounded-full blur-3xl" />
+        <div className="absolute -bottom-12 -right-12 w-40 h-40 bg-rio/20 rounded-full blur-3xl" />
       </div>
 
-      {/* Top row: number indicator + IG icon */}
-      <div className="relative flex items-start justify-between mb-8">
-        <div className={`w-2 h-2 rounded-full transition-all duration-500 ${hovered ? "bg-rio scale-150" : "bg-white/20"}`} />
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" className={`transition-all duration-500 ${hovered ? "text-rio scale-110" : "text-white/30"}`}>
-          <rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" strokeWidth="1.5" />
-          <circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="1.5" />
-          <circle cx="17.5" cy="6.5" r="1" fill="currentColor" />
-        </svg>
-      </div>
-
-      {/* Profile preview — fades in on hover */}
-      <div
-        className={`absolute top-1/2 right-6 -translate-y-1/2 transition-all duration-500 pointer-events-none ${
-          hovered ? "opacity-100 scale-100 translate-x-0" : "opacity-0 scale-90 translate-x-4"
-        }`}
-      >
-        <div className="relative w-32 h-32 md:w-40 md:h-40 rounded-full overflow-hidden ring-2 ring-rio shadow-2xl shadow-rio/40">
-          <img
-            src={localAvatar(agent.handle)}
-            alt={agent.name}
-            className="w-full h-full object-cover"
-            onError={(e) => {
-              const img = e.currentTarget as HTMLImageElement;
-              if (!img.dataset.fallback) {
-                img.dataset.fallback = "1";
-                img.src = gradientAvatar(agent.name, agent.handle);
-              }
-            }}
-          />
+      {/* Avatar — always visible, scales on hover */}
+      <div className="relative mb-3">
+        <div className={`w-20 h-20 md:w-24 md:h-24 rounded-full overflow-hidden ring-2 transition-all duration-500 ${hovered ? "ring-rio scale-110 shadow-xl shadow-rio/30" : "ring-white/15"}`}>
+          <Avatar agent={agent} className="w-full h-full object-cover" />
+        </div>
+        {/* Tiny IG badge */}
+        <div className={`absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-black border-2 transition-colors duration-500 flex items-center justify-center ${hovered ? "border-rio" : "border-white/15"}`}>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" className={`transition-colors duration-500 ${hovered ? "text-rio" : "text-white/50"}`}>
+            <rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" strokeWidth="2" />
+            <circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="2" />
+            <circle cx="17.5" cy="6.5" r="1.2" fill="currentColor" />
+          </svg>
         </div>
       </div>
 
-      {/* Name + handle */}
+      {/* Name */}
       <div className="relative">
-        <h3 className={`font-bold text-3xl md:text-4xl tracking-tight leading-tight mb-2 transition-all duration-300 ${hovered ? "text-white translate-x-1" : "text-white/90"}`}>
+        <h3 className={`font-bold text-sm md:text-base tracking-tight leading-tight transition-colors duration-300 ${hovered ? "text-white" : "text-white/90"} truncate max-w-full`}>
           {agent.name}
         </h3>
-        <p className={`text-sm font-mono tracking-wide transition-colors duration-300 ${hovered ? "text-rio" : "text-white/40"}`}>
+        <p className={`text-[10px] md:text-[11px] font-mono tracking-tight mt-0.5 transition-colors duration-300 ${hovered ? "text-rio" : "text-white/40"} truncate`}>
           @{agent.handle}
         </p>
       </div>
-
-      {/* Bottom hover indicator */}
-      <div className={`absolute bottom-0 left-0 h-px bg-rio transition-all duration-500 ${hovered ? "w-full" : "w-0"}`} />
     </a>
   );
 }
