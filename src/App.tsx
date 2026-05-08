@@ -1,26 +1,24 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState } from "react";
 
 // ─── TYPES ──────────────────────────────────────────────────────────────────
 
 interface Agent {
   name: string;
   handle: string;
+  role?: string;
   isLeader?: boolean;
 }
 
-interface AgentCounts {
-  personalReels: number;   // Real Estate Reels
-  businessReels: number;   // Daily Life Reels
-  posts: number;           // Daily Pic (POD)
-}
+// ─── TEAM ───────────────────────────────────────────────────────────────────
 
-type CountsMap = Record<string, AgentCounts>;
+const RIO: Agent = {
+  name: "Rio Vidrio",
+  handle: "rio.vidrio",
+  role: "Team Leader",
+  isLeader: true,
+};
 
-// ─── AGENTS ─────────────────────────────────────────────────────────────────
-
-const RIO: Agent = { name: "Rio Vidrio", handle: "rio.vidrio", isLeader: true };
-
-const AGENTS: Agent[] = [
+const TEAM: Agent[] = [
   { name: "Brisa Roman", handle: "brisasellsaz" },
   { name: "Xochilt Mandujano", handle: "xorealtor.az" },
   { name: "Mariel Palafox Leon", handle: "mariel.palafox.leon.realtor" },
@@ -38,555 +36,247 @@ const AGENTS: Agent[] = [
   { name: "Iris", handle: "iris_placeholder" },
 ];
 
-const ALL_HANDLES = [RIO, ...AGENTS].map((a) => a.handle);
+// Use unavatar.io to proxy Instagram profile pictures
+const avatarUrl = (handle: string) =>
+  `https://unavatar.io/instagram/${handle}?fallback=https://unavatar.io/${handle}`;
 
-// ─── PREFILL DATA ──────────────────────────────────────────────────────────
-
-const PREFILL_DATA: CountsMap = {
-  "rio.vidrio": { personalReels: 19, businessReels: 9, posts: 10 },
-  "egonvon.p": { personalReels: 19, businessReels: 3, posts: 12 },
-  "mariel.palafox.leon.realtor": { personalReels: 12, businessReels: 9, posts: 17 },
-  "xorealtor.az": { personalReels: 12, businessReels: 4, posts: 18 },
-  "brisasellsaz": { personalReels: 12, businessReels: 3, posts: 6 },
-  "antsellshomes_": { personalReels: 11, businessReels: 0, posts: 12 },
-  "az_realtor_montano": { personalReels: 7, businessReels: 2, posts: 13 },
-  "osmanyazrealtor": { personalReels: 5, businessReels: 3, posts: 12 },
-  "jilarioleon": { personalReels: 3, businessReels: 3, posts: 12 },
-  "mikemhomes": { personalReels: 4, businessReels: 1, posts: 9 },
-  "homeswithana2.0": { personalReels: 3, businessReels: 0, posts: 12 },
-  "azrealty.livclarke": { personalReels: 3, businessReels: 0, posts: 11 },
-  "britni.christenson.azrealtor": { personalReels: 3, businessReels: 0, posts: 6 },
-  "jonbsheets": { personalReels: 2, businessReels: 0, posts: 5 },
-  "gsotelo4": { personalReels: 2, businessReels: 0, posts: 2 },
-  "iris_placeholder": { personalReels: 1, businessReels: 0, posts: 5 },
-};
-
-// localStorage keys
-const LS_YEAR = "rioReelsYear";
-const LS_CURRENT = "rioReelsCurrent";
-const LS_SINCE_DATE = "rioCurrentResetDate";
-const ADMIN_PASSWORD = "Dothework!";
-
-// ─── HELPERS ────────────────────────────────────────────────────────────────
-
-function getC(map: CountsMap, handle: string): AgentCounts {
-  return map[handle] || { personalReels: 0, businessReels: 0, posts: 0 };
-}
-
-function totalVideos(c: AgentCounts): number {
-  return c.personalReels + c.businessReels;
-}
-
-function totalAll(c: AgentCounts): number {
-  return c.personalReels + c.businessReels + c.posts;
-}
-
-function loadMap(key: string, fallback: CountsMap): CountsMap {
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return { ...fallback };
-    const parsed = JSON.parse(raw);
-    const result: CountsMap = {};
-    for (const [k, v] of Object.entries(parsed)) {
-      if (typeof v === "number") {
-        result[k] = { personalReels: v, businessReels: 0, posts: 0 };
-      } else {
-        const obj = v as Record<string, number>;
-        if ("reels" in obj && !("personalReels" in obj)) {
-          result[k] = { personalReels: obj.reels || 0, businessReels: 0, posts: obj.posts || 0 };
-        } else {
-          result[k] = { personalReels: obj.personalReels || 0, businessReels: obj.businessReels || 0, posts: obj.posts || 0 };
-        }
-      }
-    }
-    return result;
-  } catch {
-    return { ...fallback };
-  }
-}
-
-function saveMap(key: string, data: CountsMap) {
-  localStorage.setItem(key, JSON.stringify(data));
-}
-
-function fmtDate(iso: string | null): string {
-  if (!iso) return "Mar 23";
-  const parts = iso.split("T")[0].split("-");
-  if (parts.length === 3) {
-    const d = new Date(+parts[0], +parts[1] - 1, +parts[2]);
-    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  }
-  return "Mar 23";
-}
-
-function fmtDateFull(iso: string | null): string {
-  if (!iso) return "Mar 23, 2026";
-  const parts = iso.split("T")[0].split("-");
-  if (parts.length === 3) {
-    const d = new Date(+parts[0], +parts[1] - 1, +parts[2]);
-    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-  }
-  return "Mar 23, 2026";
-}
-
-function todayStr(): string {
-  return new Date().toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
-}
+const igUrl = (handle: string) => `https://www.instagram.com/${handle}/`;
 
 // ─── COMPONENT ──────────────────────────────────────────────────────────────
 
 export default function App() {
-  // One-time migration: write prefill data and clear stale keys
-  useEffect(() => {
-    const migrated = localStorage.getItem("rioV3Migrated");
-    if (!migrated) {
-      // Clear all old keys
-      [
-        "rioTeamTracker", "rioTeamYear", "rioTeamCurrent", "rioTeamBaseline",
-        "rioTeamRefreshDate", "rioReelBaseline", "rioPodsYear", "rioPodsCurrent",
-        LS_YEAR, LS_CURRENT, LS_SINCE_DATE,
-      ].forEach((k) => localStorage.removeItem(k));
-      // Write prefill
-      saveMap(LS_YEAR, PREFILL_DATA);
-      saveMap(LS_CURRENT, PREFILL_DATA);
-      localStorage.setItem(LS_SINCE_DATE, "2026-03-23");
-      localStorage.setItem("rioV3Migrated", "1");
-    }
-  }, []);
-
-  const [yearMap, setYearMap] = useState<CountsMap>(() => loadMap(LS_YEAR, PREFILL_DATA));
-  const [currentMap, setCurrentMap] = useState<CountsMap>(() => loadMap(LS_CURRENT, PREFILL_DATA));
-  const [sinceDate, setSinceDate] = useState<string | null>(
-    () => localStorage.getItem(LS_SINCE_DATE) || "2026-03-23"
-  );
-
-  // Admin
-  const [showAdminModal, setShowAdminModal] = useState(false);
-  const [adminUnlocked, setAdminUnlocked] = useState(false);
-  const [adminPassword, setAdminPassword] = useState("");
-  const [passwordError, setPasswordError] = useState(false);
-  const [showResetConfirm, setShowResetConfirm] = useState<"since" | "year" | null>(null);
-  const [confirmText, setConfirmText] = useState("");
-  const [newSinceDate, setNewSinceDate] = useState("");
-  const adminTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Persist
-  useEffect(() => { saveMap(LS_YEAR, yearMap); }, [yearMap]);
-  useEffect(() => { saveMap(LS_CURRENT, currentMap); }, [currentMap]);
-  useEffect(() => {
-    if (sinceDate) localStorage.setItem(LS_SINCE_DATE, sinceDate);
-  }, [sinceDate]);
-
-  // Auto-lock after 5 min
-  const resetAdminTimer = useCallback(() => {
-    if (adminTimer.current) clearTimeout(adminTimer.current);
-    adminTimer.current = setTimeout(() => {
-      setAdminUnlocked(false);
-      setShowAdminModal(false);
-      setShowResetConfirm(null);
-      setConfirmText("");
-    }, 300000);
-  }, []);
-
-  useEffect(() => {
-    if (adminUnlocked) resetAdminTimer();
-    return () => { if (adminTimer.current) clearTimeout(adminTimer.current); };
-  }, [adminUnlocked, resetAdminTimer]);
-
-  // ─── ACTIONS ────────────────────────────────────────────────────────────
-
-  const adjust = useCallback((handle: string, field: "personalReels" | "businessReels" | "posts", delta: number) => {
-    // Adjusting the "Since" counter also updates YTD
-    setCurrentMap((prev) => {
-      const c = getC(prev, handle);
-      return { ...prev, [handle]: { ...c, [field]: Math.max(0, c[field] + delta) } };
-    });
-    setYearMap((prev) => {
-      const c = getC(prev, handle);
-      return { ...prev, [handle]: { ...c, [field]: Math.max(0, c[field] + delta) } };
-    });
-  }, []);
-
-  const handleUnlock = useCallback(() => {
-    if (adminPassword === ADMIN_PASSWORD) {
-      setAdminUnlocked(true);
-      setPasswordError(false);
-      setAdminPassword("");
-      setShowAdminModal(false);
-      resetAdminTimer();
-    } else {
-      setPasswordError(true);
-      setTimeout(() => setPasswordError(false), 600);
-    }
-  }, [adminPassword, resetAdminTimer]);
-
-  const handleResetSince = useCallback(() => {
-    const empty: CountsMap = {};
-    ALL_HANDLES.forEach((h) => { empty[h] = { personalReels: 0, businessReels: 0, posts: 0 }; });
-    setCurrentMap(empty);
-    saveMap(LS_CURRENT, empty);
-    const dateVal = newSinceDate || new Date().toISOString().split("T")[0];
-    setSinceDate(dateVal);
-    localStorage.setItem(LS_SINCE_DATE, dateVal);
-    setShowResetConfirm(null);
-    setNewSinceDate("");
-    resetAdminTimer();
-  }, [newSinceDate, resetAdminTimer]);
-
-  const handleResetYear = useCallback(() => {
-    if (confirmText !== "RESET") return;
-    const empty: CountsMap = {};
-    ALL_HANDLES.forEach((h) => { empty[h] = { personalReels: 0, businessReels: 0, posts: 0 }; });
-    setYearMap(empty);
-    setCurrentMap(empty);
-    saveMap(LS_YEAR, empty);
-    saveMap(LS_CURRENT, empty);
-    setShowResetConfirm(null);
-    setConfirmText("");
-    resetAdminTimer();
-  }, [confirmText, resetAdminTimer]);
-
-  // ─── COMPUTED ───────────────────────────────────────────────────────────
-
-  // Sort by total videos (RE + Daily reels)
-  const sortedAgents = [...AGENTS].sort(
-    (a, b) => totalVideos(getC(currentMap, b.handle)) - totalVideos(getC(currentMap, a.handle))
-  );
-
-  const totalREReels = AGENTS.reduce((s, a) => s + getC(currentMap, a.handle).personalReels, 0);
-  const totalDailyReels = AGENTS.reduce((s, a) => s + getC(currentMap, a.handle).businessReels, 0);
-  const totalPOD = AGENTS.reduce((s, a) => s + getC(currentMap, a.handle).posts, 0);
-
-  const mostActive = AGENTS.reduce(
-    (best, a) => {
-      const t = totalVideos(getC(currentMap, a.handle));
-      return t > best.total ? { agent: a, total: t } : best;
-    },
-    { agent: null as Agent | null, total: 0 }
-  );
-
-  const agentsActive = AGENTS.filter((a) => totalAll(getC(currentMap, a.handle)) > 0).length;
-
-  const sinceLabel = fmtDate(sinceDate);
-
-  // ─── ROW RENDERER ───────────────────────────────────────────────────────
-
-  const gridCols = "grid-cols-[36px_1fr_60px_60px_60px_50px_50px_50px] md:grid-cols-[56px_1fr_100px_100px_100px_80px_80px_80px]";
-
-  function renderRow(agent: Agent, rank: number | null, isLeaderRow: boolean) {
-    const cc = getC(currentMap, agent.handle);
-    const yc = getC(yearMap, agent.handle);
-
-    return (
-      <div
-        key={agent.handle}
-        className={`grid ${gridCols} px-3 md:px-5 py-4 border-b items-center transition-colors ${
-          isLeaderRow
-            ? "bg-yellow-50 border-l-4 border-l-gold border-b-gray-200"
-            : "border-b-gray-50 hover:bg-gray-50/80"
-        }`}
-      >
-        {/* Rank */}
-        <div className="flex items-center">
-          {isLeaderRow ? (
-            <span className="text-[10px] text-gold font-bold uppercase">Lead</span>
-          ) : rank === 1 ? (
-            <span className="text-2xl" title="1st Place">&#128081;</span>
-          ) : rank === 2 ? (
-            <span className="w-8 h-8 rounded-full bg-silver/20 flex items-center justify-center text-sm font-bold text-silver">2</span>
-          ) : rank === 3 ? (
-            <span className="w-8 h-8 rounded-full bg-bronze/20 flex items-center justify-center text-sm font-bold text-bronze">3</span>
-          ) : (
-            <span className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-sm font-semibold text-muted">{rank}</span>
-          )}
-        </div>
-
-        {/* Agent name + link */}
-        <div className="min-w-0">
-          <p className="text-gray-900 font-bold text-sm truncate">
-            {agent.name}
-            {isLeaderRow && <span className="ml-2 text-[10px] text-gold font-semibold uppercase">Team Leader</span>}
-          </p>
-          <a
-            href={`https://www.instagram.com/${agent.handle}/`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-red-600 hover:underline text-xs font-medium truncate block"
-          >
-            @{agent.handle}
-          </a>
-        </div>
-
-        {/* ── SINCE (primary, editable) ── */}
-
-        {/* RE Reels — Since */}
-        <div className="flex items-center justify-center gap-0.5">
-          {adminUnlocked && (
-            <button onClick={() => adjust(agent.handle, "personalReels", -1)} className="w-5 h-5 md:w-6 md:h-6 rounded-full bg-gray-200 hover:bg-gray-300 text-gray-600 font-bold text-xs flex items-center justify-center transition-all active:scale-90">-</button>
-          )}
-          <span className="text-base md:text-lg font-bold text-gray-900 w-7 md:w-10 text-center tabular-nums">{cc.personalReels}</span>
-          {adminUnlocked && (
-            <button onClick={() => adjust(agent.handle, "personalReels", 1)} className="w-5 h-5 md:w-6 md:h-6 rounded-full bg-rio hover:bg-red-700 text-white font-bold text-xs flex items-center justify-center transition-all active:scale-90">+</button>
-          )}
-        </div>
-
-        {/* Daily Life — Since */}
-        <div className="flex items-center justify-center gap-0.5">
-          {adminUnlocked && (
-            <button onClick={() => adjust(agent.handle, "businessReels", -1)} className="w-5 h-5 md:w-6 md:h-6 rounded-full bg-gray-200 hover:bg-gray-300 text-gray-600 font-bold text-xs flex items-center justify-center transition-all active:scale-90">-</button>
-          )}
-          <span className="text-base md:text-lg font-bold text-gray-900 w-7 md:w-10 text-center tabular-nums">{cc.businessReels}</span>
-          {adminUnlocked && (
-            <button onClick={() => adjust(agent.handle, "businessReels", 1)} className="w-5 h-5 md:w-6 md:h-6 rounded-full bg-rio hover:bg-red-700 text-white font-bold text-xs flex items-center justify-center transition-all active:scale-90">+</button>
-          )}
-        </div>
-
-        {/* Daily Pic — Since */}
-        <div className="flex items-center justify-center gap-0.5">
-          {adminUnlocked && (
-            <button onClick={() => adjust(agent.handle, "posts", -1)} className="w-5 h-5 md:w-6 md:h-6 rounded-full bg-gray-200 hover:bg-gray-300 text-gray-600 font-bold text-xs flex items-center justify-center transition-all active:scale-90">-</button>
-          )}
-          <span className="text-base md:text-lg font-bold text-gray-900 w-7 md:w-10 text-center tabular-nums">{cc.posts}</span>
-          {adminUnlocked && (
-            <button onClick={() => adjust(agent.handle, "posts", 1)} className="w-5 h-5 md:w-6 md:h-6 rounded-full bg-rio hover:bg-red-700 text-white font-bold text-xs flex items-center justify-center transition-all active:scale-90">+</button>
-          )}
-        </div>
-
-        {/* ── YTD (read-only, right side) ── */}
-
-        {/* RE Reels — YTD */}
-        <div className="text-center">
-          <span className="text-xs md:text-sm font-semibold text-gray-700 tabular-nums">{yc.personalReels}</span>
-        </div>
-
-        {/* Daily Life — YTD */}
-        <div className="text-center">
-          <span className="text-xs md:text-sm font-semibold text-gray-700 tabular-nums">{yc.businessReels}</span>
-        </div>
-
-        {/* Daily Pic — YTD */}
-        <div className="text-center">
-          <span className="text-xs md:text-sm font-semibold text-gray-700 tabular-nums">{yc.posts}</span>
-        </div>
-
-      </div>
-    );
-  }
-
-  // ─── RENDER ─────────────────────────────────────────────────────────────
+  const [hovered, setHovered] = useState<string | null>(null);
 
   return (
-    <div className="min-h-screen bg-offwhite">
-      {/* ─── HEADER (black with logos) ───────────────────── */}
-      <header className="bg-black px-4 md:px-8 py-4">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <img src="/rio-logo-white.png" alt="The Rio Group" className="h-10 md:h-12 w-auto" />
-          <div className="text-center hidden sm:block">
-            <h1 className="text-white text-sm md:text-base font-bold tracking-wide uppercase">
-              Team Content Tracker
-            </h1>
-            <p className="text-gray-400 text-[10px] md:text-xs font-medium">{todayStr()}</p>
+    <div className="min-h-screen bg-black text-white relative overflow-hidden">
+      {/* Ambient gradient backdrop */}
+      <div className="pointer-events-none absolute inset-0 opacity-50">
+        <div className="absolute -top-40 -left-40 w-[600px] h-[600px] rounded-full bg-rio/20 blur-[120px]" />
+        <div className="absolute top-1/3 -right-40 w-[500px] h-[500px] rounded-full bg-red-900/30 blur-[120px]" />
+        <div className="absolute bottom-0 left-1/3 w-[600px] h-[600px] rounded-full bg-rio/10 blur-[120px]" />
+      </div>
+
+      {/* Subtle noise texture */}
+      <div
+        className="pointer-events-none absolute inset-0 opacity-[0.03] mix-blend-overlay"
+        style={{
+          backgroundImage:
+            "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")",
+        }}
+      />
+
+      <div className="relative z-10">
+        {/* ─── HEADER ────────────────────────────────────────── */}
+        <header className="border-b border-white/10 backdrop-blur-sm">
+          <div className="max-w-7xl mx-auto px-6 md:px-12 py-6 flex items-center justify-between">
+            <img
+              src="/rio-logo-white.png"
+              alt="The Rio Group"
+              className="h-10 md:h-14 w-auto"
+            />
+            <img
+              src="/az-logo-white.png"
+              alt="AZ & Associates"
+              className="h-9 md:h-12 w-auto opacity-80"
+            />
           </div>
-          <div className="flex items-center gap-3">
-            <img src="/az-logo-white.png" alt="AZ & Associates" className="h-8 md:h-10 w-auto" />
-            {adminUnlocked ? (
-              <button
-                onClick={() => setAdminUnlocked(false)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-green-900/40 border border-green-500/40 rounded-xl text-xs font-semibold text-green-400 hover:bg-green-900/60 transition-colors"
-              >
-                <span className="w-2 h-2 rounded-full bg-green-500" />
-                Admin
-              </button>
-            ) : (
-              <button
-                onClick={() => setShowAdminModal(true)}
-                className="text-xl hover:scale-110 transition-transform"
-                title="Admin Login"
-              >
-                &#128274;
-              </button>
-            )}
+        </header>
+
+        {/* ─── HERO ──────────────────────────────────────────── */}
+        <section className="max-w-7xl mx-auto px-6 md:px-12 pt-20 md:pt-28 pb-12 md:pb-16">
+          <p className="text-rio text-[11px] md:text-xs tracking-[0.4em] uppercase font-semibold mb-6">
+            The Rio Group · Est. 2024
+          </p>
+          <h1 className="font-bold text-white tracking-tight leading-[0.95]" style={{ fontSize: "clamp(3rem, 9vw, 8rem)" }}>
+            Meet the
+            <br />
+            <span className="italic font-light text-white/60">team that</span>
+            <br />
+            <span className="text-rio">moves Arizona.</span>
+          </h1>
+          <p className="mt-8 text-white/50 text-base md:text-lg max-w-xl leading-relaxed">
+            A directory of every realtor, every Reel, every story.
+            Hover to peek — tap to follow.
+          </p>
+        </section>
+
+        {/* ─── LEADER FEATURE ────────────────────────────────── */}
+        <section className="max-w-7xl mx-auto px-6 md:px-12 mb-16 md:mb-20">
+          <FeatureCard
+            agent={RIO}
+            hovered={hovered === RIO.handle}
+            onHover={setHovered}
+          />
+        </section>
+
+        {/* ─── DIVIDER ───────────────────────────────────────── */}
+        <div className="max-w-7xl mx-auto px-6 md:px-12 mb-12 md:mb-16">
+          <div className="flex items-center gap-6">
+            <span className="text-rio text-[10px] md:text-xs tracking-[0.4em] uppercase font-semibold whitespace-nowrap">
+              The Roster · {TEAM.length} agents
+            </span>
+            <div className="flex-1 h-px bg-gradient-to-r from-rio/40 via-white/10 to-transparent" />
           </div>
         </div>
-      </header>
 
-      <main className="max-w-6xl mx-auto px-4 md:px-8 py-8">
-        {/* ─── SUMMARY CARDS ─────────────────────────────── */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
-          <div className="bg-white rounded-2xl shadow-md p-5">
-            <p className="text-[11px] text-muted uppercase tracking-widest font-semibold">RE Reels</p>
-            <p className="text-3xl font-bold text-gray-900 mt-1">{totalREReels.toLocaleString()}</p>
-          </div>
-          <div className="bg-white rounded-2xl shadow-md p-5">
-            <p className="text-[11px] text-muted uppercase tracking-widest font-semibold">Daily Life Reels</p>
-            <p className="text-3xl font-bold text-gray-900 mt-1">{totalDailyReels.toLocaleString()}</p>
-          </div>
-          <div className="bg-white rounded-2xl shadow-md p-5">
-            <p className="text-[11px] text-muted uppercase tracking-widest font-semibold">Daily Pics</p>
-            <p className="text-3xl font-bold text-gray-900 mt-1">{totalPOD.toLocaleString()}</p>
-          </div>
-          <div className="bg-white rounded-2xl shadow-md p-5">
-            <p className="text-[11px] text-muted uppercase tracking-widest font-semibold">Most Active</p>
-            <p className="text-lg font-bold text-gray-900 mt-1 truncate">{mostActive.agent?.name ?? "—"}</p>
-            {mostActive.total > 0 && (
-              <p className="text-xs text-rio font-semibold">{mostActive.total} videos</p>
-            )}
-          </div>
-          <div className="bg-white rounded-2xl shadow-md p-5">
-            <p className="text-[11px] text-muted uppercase tracking-widest font-semibold">Agents Active</p>
-            <p className="text-3xl font-bold text-gray-900 mt-1">
-              {agentsActive}<span className="text-base text-muted font-normal"> / {AGENTS.length}</span>
-            </p>
-          </div>
-        </div>
-
-        {/* ─── LEADERBOARD ───────────────────────────────── */}
-        <div className="bg-white rounded-2xl shadow-md overflow-visible">
-          {/* Column headers — Since (primary, left) | YTD (right) */}
-          <div className={`grid ${gridCols} px-3 md:px-5 py-2 border-b border-gray-200 text-[9px] md:text-[10px] text-muted uppercase tracking-wider font-semibold`}>
-            <span />
-            <span />
-            <span className="text-center col-span-3 border-b border-rio pb-1 -mb-2 text-rio">Since {sinceLabel}</span>
-            <span className="text-center col-span-3 border-b border-gray-200 pb-1 -mb-2">YTD</span>
-          </div>
-          <div className={`grid ${gridCols} px-3 md:px-5 py-2 border-b border-gray-100 text-[8px] md:text-[10px] text-muted uppercase tracking-wider font-semibold`}>
-            <span>#</span>
-            <span>Agent</span>
-            <span className="text-center">RE Reel</span>
-            <span className="text-center">Daily</span>
-            <span className="text-center">Pic</span>
-            <span className="text-center">RE Reel</span>
-            <span className="text-center">Daily</span>
-            <span className="text-center">Pic</span>
-          </div>
-
-          {/* Rio's row — admin only */}
-          {adminUnlocked && (
-            <>
-              {renderRow(RIO, null, true)}
-              <div className="border-b-2 border-gray-300" />
-            </>
-          )}
-
-          {/* Team rows */}
-          {sortedAgents.map((agent, idx) => renderRow(agent, idx + 1, false))}
-        </div>
-
-        {/* ─── ADMIN PANEL (inline, only when unlocked) ──── */}
-        {adminUnlocked && (
-          <div className="mt-8 mb-8 bg-white rounded-2xl shadow-md p-6 max-w-lg">
-            <div className="flex items-center gap-2 mb-4">
-              <span className="w-2 h-2 rounded-full bg-green-500" />
-              <span className="text-xs text-green-600 font-semibold">Admin Mode — auto-locks in 5 min</span>
-            </div>
-
-            {/* Reset Since Date */}
-            <div className="bg-gray-50 rounded-xl p-4 mb-4">
-              <p className="text-sm font-semibold text-gray-700 mb-2">Reset &ldquo;Since&rdquo; Period</p>
-              <p className="text-xs text-muted mb-3">Pick a new start date and zero the &ldquo;Since&rdquo; columns.</p>
-              <div className="flex gap-2">
-                <input
-                  type="date"
-                  value={newSinceDate}
-                  onChange={(e) => setNewSinceDate(e.target.value)}
-                  className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-rio"
-                />
-                <button
-                  onClick={handleResetSince}
-                  className="px-4 py-2 bg-rio text-white rounded-xl text-sm font-semibold hover:bg-red-700 transition-colors"
-                >
-                  Reset Since Date
-                </button>
-              </div>
-              {sinceDate && (
-                <p className="text-[11px] text-muted mt-2">Currently: Since {fmtDateFull(sinceDate)}</p>
-              )}
-            </div>
-
-            {/* Reset Year */}
-            {showResetConfirm !== "year" ? (
-              <button
-                onClick={() => setShowResetConfirm("year")}
-                className="w-full px-4 py-3 bg-red-50 hover:bg-red-100 rounded-xl text-sm font-semibold text-red-600 transition-colors text-left"
-              >
-                Reset Year (All Counts)
-                <span className="block text-xs text-red-400 font-normal mt-0.5">
-                  Zeros ALL counts — cannot be undone
-                </span>
-              </button>
-            ) : (
-              <div className="bg-red-50 rounded-xl p-4 border border-red-200">
-                <p className="text-sm text-red-700 font-semibold mb-2">Type RESET to confirm</p>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={confirmText}
-                    onChange={(e) => setConfirmText(e.target.value)}
-                    placeholder="RESET"
-                    className="flex-1 px-4 py-2 border border-red-200 rounded-xl text-sm focus:outline-none focus:border-red-400"
-                  />
-                  <button
-                    onClick={handleResetYear}
-                    disabled={confirmText !== "RESET"}
-                    className="px-5 py-2 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700 disabled:opacity-40 transition-colors"
-                  >
-                    Confirm
-                  </button>
-                  <button
-                    onClick={() => { setShowResetConfirm(null); setConfirmText(""); }}
-                    className="px-4 py-2 bg-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-300 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </main>
-
-      {/* ─── ADMIN MODAL ─────────────────────────────────── */}
-      {showAdminModal && !adminUnlocked && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setShowAdminModal(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm mx-4" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-bold text-gray-900 mb-1">Admin Login</h3>
-            <p className="text-sm text-muted mb-4">Enter password to unlock editing</p>
-            <div className={passwordError ? "animate-shake" : ""}>
-              <input
-                type="password"
-                value={adminPassword}
-                onChange={(e) => setAdminPassword(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleUnlock()}
-                placeholder="Password"
-                autoFocus
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-rio focus:ring-2 focus:ring-rio/20 mb-3"
+        {/* ─── TEAM GRID ─────────────────────────────────────── */}
+        <section className="max-w-7xl mx-auto px-6 md:px-12 pb-20 md:pb-32">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-px bg-white/[0.06] rounded-3xl overflow-hidden border border-white/10">
+            {TEAM.map((agent) => (
+              <AgentCard
+                key={agent.handle}
+                agent={agent}
+                hovered={hovered === agent.handle}
+                onHover={setHovered}
               />
-            </div>
-            {passwordError && (
-              <p className="text-red-500 text-xs mb-3 font-medium">Incorrect password</p>
-            )}
-            <div className="flex gap-2">
-              <button
-                onClick={handleUnlock}
-                className="flex-1 px-4 py-2.5 bg-rio text-white rounded-xl text-sm font-semibold hover:bg-red-700 transition-colors"
-              >
-                Unlock
-              </button>
-              <button
-                onClick={() => { setShowAdminModal(false); setAdminPassword(""); setPasswordError(false); }}
-                className="px-4 py-2.5 bg-gray-100 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-200 transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
+            ))}
           </div>
-        </div>
-      )}
+        </section>
+
+        {/* ─── FOOTER ────────────────────────────────────────── */}
+        <footer className="border-t border-white/10 backdrop-blur-sm">
+          <div className="max-w-7xl mx-auto px-6 md:px-12 py-8 flex flex-col md:flex-row items-center justify-between gap-4 text-[11px] tracking-widest uppercase text-white/40">
+            <span>© {new Date().getFullYear()} The Rio Group</span>
+            <span>Powered by AZ &amp; Associates</span>
+          </div>
+        </footer>
+      </div>
     </div>
+  );
+}
+
+// ─── FEATURE CARD (Leader) ──────────────────────────────────────────────────
+
+function FeatureCard({
+  agent,
+  hovered,
+  onHover,
+}: {
+  agent: Agent;
+  hovered: boolean;
+  onHover: (h: string | null) => void;
+}) {
+  return (
+    <a
+      href={igUrl(agent.handle)}
+      target="_blank"
+      rel="noopener noreferrer"
+      onMouseEnter={() => onHover(agent.handle)}
+      onMouseLeave={() => onHover(null)}
+      className="group relative grid grid-cols-1 md:grid-cols-[1fr_2fr] gap-8 md:gap-12 items-center bg-gradient-to-br from-rio/15 via-black to-black border border-rio/30 rounded-3xl p-8 md:p-12 overflow-hidden hover:border-rio transition-all duration-500"
+    >
+      {/* Glow on hover */}
+      <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none">
+        <div className="absolute -top-20 -right-20 w-96 h-96 bg-rio/20 rounded-full blur-3xl" />
+      </div>
+
+      {/* Avatar */}
+      <div className="relative">
+        <div className={`relative w-full max-w-[280px] mx-auto aspect-square rounded-full overflow-hidden ring-1 ring-rio/30 transition-all duration-500 ${hovered ? "ring-4 ring-rio scale-[1.02]" : ""}`}>
+          <img
+            src={avatarUrl(agent.handle)}
+            alt={agent.name}
+            loading="lazy"
+            className="w-full h-full object-cover"
+            onError={(e) => {
+              (e.currentTarget as HTMLImageElement).src =
+                `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%23C8202A' width='100' height='100'/><text x='50' y='62' text-anchor='middle' font-family='sans-serif' font-size='40' fill='white' font-weight='700'>${agent.name[0]}</text></svg>`;
+            }}
+          />
+        </div>
+        {/* Decorative ring */}
+        <div className="absolute inset-0 rounded-full border border-rio/20 scale-110 pointer-events-none" />
+      </div>
+
+      {/* Info */}
+      <div className="relative">
+        <span className="inline-block text-rio text-[10px] tracking-[0.4em] uppercase font-semibold mb-4">
+          {agent.role || "Featured"}
+        </span>
+        <h2 className="text-5xl md:text-7xl font-bold tracking-tight leading-[0.95] mb-4">
+          {agent.name}
+        </h2>
+        <p className="text-white/60 text-lg md:text-xl mb-6 font-light">
+          @{agent.handle}
+        </p>
+        <span className="inline-flex items-center gap-3 text-rio font-semibold text-sm tracking-wider uppercase">
+          View Instagram
+          <svg width="18" height="10" viewBox="0 0 18 10" fill="none" className="transition-transform group-hover:translate-x-2">
+            <path d="M1 5h16M13 1l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </span>
+      </div>
+    </a>
+  );
+}
+
+// ─── AGENT CARD ─────────────────────────────────────────────────────────────
+
+function AgentCard({
+  agent,
+  hovered,
+  onHover,
+}: {
+  agent: Agent;
+  hovered: boolean;
+  onHover: (h: string | null) => void;
+}) {
+  return (
+    <a
+      href={igUrl(agent.handle)}
+      target="_blank"
+      rel="noopener noreferrer"
+      onMouseEnter={() => onHover(agent.handle)}
+      onMouseLeave={() => onHover(null)}
+      className="group relative bg-black hover:bg-zinc-950 transition-colors duration-300 p-8 md:p-10 flex flex-col justify-between min-h-[280px] overflow-hidden"
+    >
+      {/* Hover glow */}
+      <div className={`absolute inset-0 transition-opacity duration-500 pointer-events-none ${hovered ? "opacity-100" : "opacity-0"}`}>
+        <div className="absolute -bottom-20 -right-20 w-64 h-64 bg-rio/20 rounded-full blur-3xl" />
+      </div>
+
+      {/* Top row: number indicator + IG icon */}
+      <div className="relative flex items-start justify-between mb-8">
+        <div className={`w-2 h-2 rounded-full transition-all duration-500 ${hovered ? "bg-rio scale-150" : "bg-white/20"}`} />
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" className={`transition-all duration-500 ${hovered ? "text-rio scale-110" : "text-white/30"}`}>
+          <rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" strokeWidth="1.5" />
+          <circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="1.5" />
+          <circle cx="17.5" cy="6.5" r="1" fill="currentColor" />
+        </svg>
+      </div>
+
+      {/* Profile preview — fades in on hover */}
+      <div
+        className={`absolute top-1/2 right-6 -translate-y-1/2 transition-all duration-500 pointer-events-none ${
+          hovered ? "opacity-100 scale-100 translate-x-0" : "opacity-0 scale-90 translate-x-4"
+        }`}
+      >
+        <div className="relative w-32 h-32 md:w-40 md:h-40 rounded-full overflow-hidden ring-2 ring-rio shadow-2xl shadow-rio/40">
+          <img
+            src={avatarUrl(agent.handle)}
+            alt={agent.name}
+            loading="lazy"
+            className="w-full h-full object-cover"
+            onError={(e) => {
+              (e.currentTarget as HTMLImageElement).src =
+                `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%23C8202A' width='100' height='100'/><text x='50' y='62' text-anchor='middle' font-family='sans-serif' font-size='40' fill='white' font-weight='700'>${agent.name[0]}</text></svg>`;
+            }}
+          />
+        </div>
+      </div>
+
+      {/* Name + handle */}
+      <div className="relative">
+        <h3 className={`font-bold text-3xl md:text-4xl tracking-tight leading-tight mb-2 transition-all duration-300 ${hovered ? "text-white translate-x-1" : "text-white/90"}`}>
+          {agent.name}
+        </h3>
+        <p className={`text-sm font-mono tracking-wide transition-colors duration-300 ${hovered ? "text-rio" : "text-white/40"}`}>
+          @{agent.handle}
+        </p>
+      </div>
+
+      {/* Bottom hover indicator */}
+      <div className={`absolute bottom-0 left-0 h-px bg-rio transition-all duration-500 ${hovered ? "w-full" : "w-0"}`} />
+    </a>
   );
 }
